@@ -153,6 +153,6 @@ coefplot(test)
 ggplot(hfi_thresholds_full) +
   geom_histogram(aes(x=dengue_cases), bins=20) +
   xlim(c(0,100))
-library(ggplot2)
+
   
 

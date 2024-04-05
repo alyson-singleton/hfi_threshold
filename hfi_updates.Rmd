@@ -1,0 +1,401 @@
+---
+title: "HFI thresholds updates"
+author: "Alyson Singleton and Eloise Skinner"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+#read in required packages
+require(readxl)
+require(tidyverse)
+library(sf)
+library(mapview)
+library(ggplot2)
+library(tidyverse)
+library(plm)
+library(fixest)
+
+#add back in arial font
+library(showtext)
+font_add("Arial", "/Library/Fonts/Arial.ttf")  # Use the actual file path
+showtext_auto()
+
+#knitr ops
+knitr::opts_chunk$set(echo = F, results='asis', warning=F, message=F, cache=T,
+                      fig.height=5, fig.width=10)
+```
+
+# Summary
+This work will build on the work published in Skinner et al., 2023, which revealed that human footprint index (HFI) has the potential to predict local occurrence of multiple vector-borne diseases, in line with ecological theory. Due to data availability constraints, Skinner et al., 2023 used a machine learning approach, limiting the ability to identify causal relationships. Recently published updates to HFI data have dramatically extended the temporal coverage from just 2013 and 2019 to annual estimates from 2000–2020. This newly published data allows for a panel data regression approach that has the potential to reveal causal relationships between HFI and disease occurrence. We propose a first pass investigating HFI relationships with only dengue occurrence, with the potential to expand the analysis to other diseases. We chose dengue as our first disease of interest due to (1) its consistent presence in Brazil since 2000, (2) it was found to have the strongest relationship with HFI in Skinner et al., 2023 (Fig. 3) out of six diseases investigated, (3) its large incidence/occurrence values across a substantial range of Brazil, making it the most likely disease to power a panel regression analysis, and (4) it’s transmission is tightly associated with specific environments (urban) because of the biology of its primary vector *Aedes aegypti*, which breeds in urban settings and predominantly feeds on humans. Ideally, we hope that this analysis can reveal HFI tipping points that allow dengue to establish in areas that are undergoing increasing development and pressure in Brazil and beyond.
+
+
+# Raw data figures
+
+### Which municipalities cross the threshold found in Skinner et al., 2023?
+
+Skinner et al., 2023 identified HFI = 8 as the threshold value at which dengue reaches 50% of its maximum occurrence probability. All municipalities that span the value of HFI = 8 are marked in blue. They equate to 323 of the total 5569 Brazilian municipalities (5.8%). The proportion of municipalities interacting with the threshold is comparable across threshold values of 8, 9, and 10.
+
+```{r}
+#load new dataset
+hfi_thresholds_full <- read.csv("~/Desktop/doctorate/hfi_threshold/hfi_thresholds_w_options.csv")
+
+#################
+#build subset ops
+#################
+
+#option1: only municipalities that cross the threshold at some point (n=?)
+hfi_thresholds_th_subset <- hfi_thresholds_full %>%
+  group_by(CD_MUN) %>%
+  summarize(min = min(hfi_median),
+            max = max(hfi_median))
+
+list <- which(hfi_thresholds_th_subset$min<8 & hfi_thresholds_th_subset$max>8)
+CD_MUN_list <- as.data.frame(hfi_thresholds_th_subset[list,1])
+#hfi_thresholds_th_subset <- hfi_thresholds_full[which(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN)),]
+hfi_thresholds_full$cross_threshold <- ifelse(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN), "Yes", "No")
+table(hfi_thresholds_full$cross_threshold)
+ggplot(hfi_thresholds_full) +
+  geom_line(aes(x=year, y=hfi_median, group=CD_MUN, color=cross_threshold), alpha=0.15) +#"#648FFF") +
+  geom_hline(aes(yintercept=8), linetype='dashed', linewidth=0.2) +
+  #labs(color="Model Type") +
+  #ggtitle("B. straminea") +
+  xlab("Year") + ylab("Median HFI\n(Municipatlity)") + 
+  scale_color_manual(name = "Cross threshold (HFI=8)?", values=c('lightgrey', '#648FFF'), labels=c('No', 'Yes'),) +
+  theme_bw()+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=22),
+        axis.title.y=element_text(size=16,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=16),
+        axis.title.x=element_text(size=16),
+        axis.text.x=element_text(size=16),
+        axis.text = element_text(size=16),
+        legend.text=element_text(size=14),
+        legend.title=element_text(size=14),
+        legend.position = "right",
+        strip.text.x = element_text(size = 14))
+
+
+
+#ggplot(hfi_thresholds_th_subset) +
+#  geom_line(aes(x=year, y=threshold_dummy_gt8_3y, group=CD_MUN), alpha=0.05)
+
+#panelview
+
+
+#outcome histogram
+#ggplot(hfi_thresholds_full) +
+#  geom_histogram(aes(x=dengue_cases), bins=20) +
+#  xlim(c(0,100))
+```
+
+### Only municipalities that cross the threshold
+
+Same plot as above, but subset to municipalities that span HFI = 8.
+
+```{r}
+hfi_thresholds_th_subset <- hfi_thresholds_full[which(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN)),]
+ggplot(hfi_thresholds_th_subset) +
+  geom_line(aes(x=year, y=hfi_median, group=CD_MUN), alpha=0.15, color="#648FFF") +
+  geom_hline(aes(yintercept=8), linetype='dashed', linewidth=0.2) +
+  #labs(color="Model Type") +
+  #ggtitle("B. straminea") +
+  xlab("Year") + ylab("Median HFI\n(Municipatlity)") + 
+  scale_color_manual(name = "Cross threshold (HFI=8)?", values=c('lightgrey', '#648FFF'), labels=c('No', 'Yes'),) +
+  theme_bw()+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=22),
+        axis.title.y=element_text(size=16,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=16),
+        axis.title.x=element_text(size=16),
+        axis.text.x=element_text(size=16),
+        axis.text = element_text(size=16),
+        legend.text=element_text(size=14),
+        legend.title=element_text(size=14),
+        legend.position = "right",
+        strip.text.x = element_text(size = 14))
+```
+
+# Preliminary panel model methods
+
+Preliminary model set up includes a simple panel regression model regressing threshold values against dengue occurrence with nine years of lags, unit (municipality) fixed effects, and yearly fixed effects. Standard errors clustered at the unit level.
+
+Summary of various model options I have tried:
+
+* HFI thresholds
+    + Using HFI median (continuous treatment)
+    + Changing HFI median to a binary variable (0 when below 8, 1 when above 8)
+    + Changing HFI median to a binary variable and demanding it be above 8 for three years to shift to 1, and below 8 for three years to shift to 0
+    + Varying threshold between 8, 9, 10 (minimal difference, effect less strong w 9 v 8 or 10)
+* Occurrence / incidence values
+    + Using raw incidence
+    + Using occurrence
+        - 1 when 5 cases that year, 0 otherwise
+        - 1 when 8 cases that year, 0 otherwise
+        - 1 when 10 cases that year, 0 otherwise
+        - 1 when incidence is above 300 per 100,000 that year, 0 otherwise
+        - All above options but after first 1, always 1 for all following years
+* Subsets of municipalities
+    + All municipalities
+    + Only municipalities that span threshold value at some point during study period (blue lines above)
+    
+# Preliminary results
+
+The general pattern coming out of all model specifications shows HFI having little, no, or negative impact on dengue occurrence until lags 5-9 where impact becomes positive, sometimes significantly. The pattern comes out most strongly when subsetting to just the municipalities that span the HFI threshold value. Surprisingly, demanding HFI staying above or below the threshold for 3 years to change between 1 and 0 produced the most insignificant results. A few examples are included below to show range of possible results depending on modeling choices (**changes from prior example bolded in description**). Next steps listed below.
+
+#### Example 1
+
+All municipalities, threshold dummy 1 or 0 depending on being above or below 8, occurrence outcome 1 when above 10, 0 when below (remains 1 for rest of sample).
+
+```{r}
+###################
+#really basic model
+###################
+hfi_thresholds_test <- hfi_thresholds_full #hfi_thresholds_th_subset or hfi_thresholds_full
+hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
+#hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
+#hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
+
+test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
+#summary(test)
+#coefplot(test)
+
+df <- as.data.frame(test$coeftable)
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
+               'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
+df$upper <- df$estimate+1.96*df$std_error
+df$lower <- df$estimate-1.96*df$std_error
+dengue_yearly_did <- ggplot(df) +
+  geom_hline(aes(yintercept=0), colour='red', size=.4) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
+  #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
+  theme_bw()+
+  #ylim(c(-0.02,0.31))+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=18),
+        axis.title.y=element_text(size=14,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=12),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=12),
+        axis.text = element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position = "right",
+        strip.text.x = element_text(size = 12))
+dengue_yearly_did
+
+```
+
+#### Example 2
+
+**Only municipalities that span HFI threshold**, threshold dummy 1 or 0 depending on being above or below 8, occurrence outcome 1 when above 10, 0 when below (remains 1 for rest of sample).
+
+```{r}
+###################
+#really basic model
+###################
+hfi_thresholds_test <- hfi_thresholds_th_subset #hfi_thresholds_th_subset or hfi_thresholds_full
+hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
+#hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
+#hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
+
+test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+#summary(test)
+#coefplot(test)
+
+df <- as.data.frame(test$coeftable)
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
+               'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
+df$upper <- df$estimate+1.96*df$std_error
+df$lower <- df$estimate-1.96*df$std_error
+dengue_yearly_did <- ggplot(df) +
+  geom_hline(aes(yintercept=0), colour='red', size=.4) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
+  #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
+  theme_bw()+
+  #ylim(c(-0.02,0.31))+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=18),
+        axis.title.y=element_text(size=14,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=12),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=12),
+        axis.text = element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position = "right",
+        strip.text.x = element_text(size = 12))
+dengue_yearly_did
+
+```
+
+#### Example 3
+
+Only municipalities that span HFI threshold, threshold dummy 1 or 0 depending on being **above or below 8 for at least three years**, occurrence outcome 1 when above 10, 0 when below (remains 1 for rest of sample).
+
+```{r}
+###################
+#really basic model
+###################
+hfi_thresholds_test <- hfi_thresholds_th_subset #hfi_thresholds_th_subset or hfi_thresholds_full
+hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
+#hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
+#hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
+
+test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8_3y, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+#summary(test)
+#coefplot(test)
+
+df <- as.data.frame(test$coeftable)
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
+               'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
+df$upper <- df$estimate+1.96*df$std_error
+df$lower <- df$estimate-1.96*df$std_error
+dengue_yearly_did <- ggplot(df) +
+  geom_hline(aes(yintercept=0), colour='red', size=.4) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
+  #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
+  theme_bw()+
+  #ylim(c(-0.02,0.31))+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=18),
+        axis.title.y=element_text(size=14,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=12),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=12),
+        axis.text = element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position = "right",
+        strip.text.x = element_text(size = 12))
+dengue_yearly_did
+
+```
+
+#### Example 4
+
+Only municipalities that span HFI threshold, threshold dummy 1 or 0 depending on being above or below 8, **occurrence outcome 1 when incidence above 300 per 100k**, 0 when below (remains 1 for rest of sample).
+
+```{r}
+###################
+#really basic model
+###################
+hfi_thresholds_test <- hfi_thresholds_th_subset #hfi_thresholds_th_subset or hfi_thresholds_full
+hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
+#hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
+#hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
+
+test <- fepois(incidence_300_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+#summary(test)
+#coefplot(test)
+
+df <- as.data.frame(test$coeftable)
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
+               'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
+df$upper <- df$estimate+1.96*df$std_error
+df$lower <- df$estimate-1.96*df$std_error
+dengue_yearly_did <- ggplot(df) +
+  geom_hline(aes(yintercept=0), colour='red', size=.4) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
+  #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
+  theme_bw()+
+  #ylim(c(-0.02,0.31))+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=18),
+        axis.title.y=element_text(size=14,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=12),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=12),
+        axis.text = element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position = "right",
+        strip.text.x = element_text(size = 12))
+dengue_yearly_did
+
+```
+
+#### Example 5
+
+Only municipalities that span HFI threshold, **HFI median (continuous)**, occurrence outcome 1 when above 10, 0 when below (remains 1 for rest of sample).
+
+```{r}
+###################
+#really basic model
+###################
+hfi_thresholds_test <- hfi_thresholds_th_subset #hfi_thresholds_th_subset or hfi_thresholds_full
+hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
+#hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
+#hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
+
+test <- fepois(occ_10_1 ~ l(hfi_median, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+#summary(test)
+#coefplot(test)
+
+df <- as.data.frame(test$coeftable)
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
+               'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
+df$upper <- df$estimate+1.96*df$std_error
+df$lower <- df$estimate-1.96*df$std_error
+dengue_yearly_did <- ggplot(df) +
+  geom_hline(aes(yintercept=0), colour='red', size=.4) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
+  #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
+  theme_bw()+
+  #ylim(c(-0.02,0.31))+
+  theme(plot.title = element_text(size=20),
+        plot.title.position = "plot",
+        plot.subtitle = element_text(hjust=0.5, size=22),
+        axis.title=element_text(size=18),
+        axis.title.y=element_text(size=14,angle=0, vjust=.5, hjust=0.5),
+        axis.text.y=element_text(size=12),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=12),
+        axis.text = element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position = "right",
+        strip.text.x = element_text(size = 12))
+dengue_yearly_did
+
+```
+
+# Next steps
+
+* Include a temperature component (throw out municipalities that do not have suitable climate conditions)
+* Try a long difference (compare rate of change early in sample to rate of change late in sample--don't include all middle years)
+* Try HFI max instead of HFI median
+* Try including a few difference covariates (precip?) and see how much they impact the HFI coefficient value

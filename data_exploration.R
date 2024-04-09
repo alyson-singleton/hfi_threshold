@@ -114,8 +114,35 @@ ggplot(hfi_thresholds_full) +
 
 #store dataset for future use
 write.csv(hfi_thresholds_full, "~/Desktop/doctorate/hfi_threshold/hfi_thresholds_w_options.csv")
+
 #load new dataset
 hfi_thresholds_full <- read.csv("~/Desktop/doctorate/hfi_threshold/hfi_thresholds_w_options.csv")
+
+#################
+#add temperature data
+#################
+
+brazil_temp_monthly <- read.csv("~/Downloads/brazil_temperature_monthly_mean.csv")
+brazil_temp_monthly <- brazil_temp_monthly[,c(243,2:241)]
+brazil_temp_monthly_long <- brazil_temp_monthly %>% 
+  pivot_longer(cols = c(2:241), 
+               names_to = "yearmonth", 
+               values_to = "monthly_mean_temp")
+brazil_temp_monthly_long <- as.data.frame(brazil_temp_monthly_long)
+brazil_temp_monthly_long$month <- c(1:12)
+brazil_temp_monthly_long$CD_MUN <- str_sub(as.character(brazil_temp_monthly_long$CD_MUN), end = -2)
+brazil_temp_monthly_long$year <- str_sub(as.character(brazil_temp_monthly_long$yearmonth), start = 2, end = 5)
+brazil_temp_monthly_long$year <- as.numeric(brazil_temp_monthly_long$year)
+brazil_temp_monthly_long$CD_MUN <- as.numeric(brazil_temp_monthly_long$CD_MUN)
+brazil_temp_monthly_long <- brazil_temp_monthly_long[,c(1,3:5)]
+brazil_temp_monthly_long <- brazil_temp_monthly_long %>%
+  group_by(year,CD_MUN) %>%
+  summarise(annual_mean_temp = mean(monthly_mean_temp))
+brazil_temp_monthly_long$annual_mean_temp <- brazil_temp_monthly_long$annual_mean_temp - 273.15
+table(brazil_temp_monthly_long$annual_mean_temp < 20)
+
+hfi_thresholds_full <- left_join(hfi_thresholds_full, brazil_temp_monthly_long, by = c("year", "CD_MUN"))
+
 
 #################
 #build subset ops

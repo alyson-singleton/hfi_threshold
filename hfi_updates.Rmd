@@ -35,7 +35,7 @@ This work will build on the work published in Skinner et al., 2023, which reveal
 
 ### Which municipalities cross the threshold found in Skinner et al., 2023?
 
-Skinner et al., 2023 identified HFI = 8 as the threshold value at which dengue reaches 50% of its maximum occurrence probability. All municipalities that span the value of HFI = 8 are marked in blue. They equate to 323 of the total 5569 Brazilian municipalities (5.8%). The proportion of municipalities interacting with the threshold is comparable across threshold values of 8, 9, and 10.
+Skinner et al., 2023 identified HFI = 8 as the threshold value at which dengue reaches 50% of its maximum occurrence probability (Fig 4a). All municipalities that span the value of HFI = 8 are marked in blue. They equate to 323 of the total 5569 Brazilian municipalities (5.8%). The proportion of municipalities interacting with the threshold is comparable across threshold values of 8, 9, and 10.
 
 ```{r}
 #load new dataset
@@ -55,7 +55,9 @@ list <- which(hfi_thresholds_th_subset$min<8 & hfi_thresholds_th_subset$max>8)
 CD_MUN_list <- as.data.frame(hfi_thresholds_th_subset[list,1])
 #hfi_thresholds_th_subset <- hfi_thresholds_full[which(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN)),]
 hfi_thresholds_full$cross_threshold <- ifelse(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN), "Yes", "No")
-table(hfi_thresholds_full$cross_threshold)
+hfi_thresholds_temp_subset <- hfi_thresholds_full[which(hfi_thresholds_full$annual_mean_temp > 20),]
+#table(hfi_thresholds_full$cross_threshold)
+
 ggplot(hfi_thresholds_full) +
   geom_line(aes(x=year, y=hfi_median, group=CD_MUN, color=cross_threshold), alpha=0.15) +#"#648FFF") +
   geom_hline(aes(yintercept=8), linetype='dashed', linewidth=0.2) +
@@ -98,6 +100,8 @@ Same plot as above, but subset to municipalities that span HFI = 8.
 
 ```{r}
 hfi_thresholds_th_subset <- hfi_thresholds_full[which(as.numeric(hfi_thresholds_full$CD_MUN) %in% as.numeric(CD_MUN_list$CD_MUN)),]
+hfi_thresholds_th_temp_subset <- hfi_thresholds_th_subset[which(hfi_thresholds_th_subset$annual_mean_temp > 20),]
+#table(hfi_thresholds_th_subset$annual_mean_temp <20)
 ggplot(hfi_thresholds_th_subset) +
   geom_line(aes(x=year, y=hfi_median, group=CD_MUN), alpha=0.15, color="#648FFF") +
   geom_hline(aes(yintercept=8), linetype='dashed', linewidth=0.2) +
@@ -135,10 +139,10 @@ Summary of various model options I have tried:
 * Occurrence / incidence values
     + Using raw incidence
     + Using occurrence
-        - 1 when 5 cases that year, 0 otherwise
+        - 1 when 5 cases that year, 0 otherwise (original Skinner et al., 2023 occurrence designation)
         - 1 when 8 cases that year, 0 otherwise
         - 1 when 10 cases that year, 0 otherwise
-        - 1 when incidence is above 300 per 100,000 that year, 0 otherwise
+        - 1 when incidence is above 300 per 100,000 that year, 0 otherwise (commonly used by the National Dengue Control Programme in Brazil)
         - All above options but after first 1, always 1 for all following years
 * Subsets of municipalities
     + All municipalities
@@ -162,21 +166,27 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
 test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
+test_temp <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)
 
-df <- as.data.frame(test$coeftable)
-colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df <- rbind(as.data.frame(cbind(test$coeftable,c(rep("All",10)))),
+            as.data.frame(cbind(test_temp$coeftable,c(rep("Temp > 20",10)))))
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value', 'Temp')
+df$estimate <- as.numeric(df$estimate)
+df$std_error <- as.numeric(df$std_error)
 df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
                'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
 df$upper <- df$estimate+1.96*df$std_error
 df$lower <- df$estimate-1.96*df$std_error
-dengue_yearly_did <- ggplot(df) +
+dengue_yearly_did <- ggplot(df, aes(group=Temp)) +
   geom_hline(aes(yintercept=0), colour='red', size=.4) +
-  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower, color=Temp), position=position_dodge(width=0.3), width=0, size=0.5) +
+  scale_color_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
   #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
-  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate, fill=Temp), position=position_dodge(width=0.3), size=3, shape=21) +
+  scale_fill_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
   theme_bw()+
   #ylim(c(-0.02,0.31))+
@@ -211,21 +221,27 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
 test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+test_temp <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)
 
-df <- as.data.frame(test$coeftable)
-colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df <- rbind(as.data.frame(cbind(test$coeftable,c(rep("All",10)))),
+            as.data.frame(cbind(test_temp$coeftable,c(rep("Temp > 20",10)))))
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value', 'Temp')
+df$estimate <- as.numeric(df$estimate)
+df$std_error <- as.numeric(df$std_error)
 df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
                'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
 df$upper <- df$estimate+1.96*df$std_error
 df$lower <- df$estimate-1.96*df$std_error
-dengue_yearly_did <- ggplot(df) +
+dengue_yearly_did <- ggplot(df, aes(group=Temp)) +
   geom_hline(aes(yintercept=0), colour='red', size=.4) +
-  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower, color=Temp), position=position_dodge(width=0.3), width=0, size=0.5) +
+  scale_color_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
   #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
-  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate, fill=Temp), position=position_dodge(width=0.3), size=3, shape=21) +
+  scale_fill_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
   theme_bw()+
   #ylim(c(-0.02,0.31))+
@@ -260,21 +276,27 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
 test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8_3y, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+test_temp <- fepois(occ_10_1 ~ l(threshold_dummy_gt8_3y, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)
 
-df <- as.data.frame(test$coeftable)
-colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df <- rbind(as.data.frame(cbind(test$coeftable,c(rep("All",10)))),
+            as.data.frame(cbind(test_temp$coeftable,c(rep("Temp > 20",10)))))
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value', 'Temp')
+df$estimate <- as.numeric(df$estimate)
+df$std_error <- as.numeric(df$std_error)
 df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
                'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
 df$upper <- df$estimate+1.96*df$std_error
 df$lower <- df$estimate-1.96*df$std_error
-dengue_yearly_did <- ggplot(df) +
+dengue_yearly_did <- ggplot(df, aes(group=Temp)) +
   geom_hline(aes(yintercept=0), colour='red', size=.4) +
-  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower, color=Temp), position=position_dodge(width=0.3), width=0, size=0.5) +
+  scale_color_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
   #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
-  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate, fill=Temp), position=position_dodge(width=0.3), size=3, shape=21) +
+  scale_fill_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
   theme_bw()+
   #ylim(c(-0.02,0.31))+
@@ -309,21 +331,27 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
 test <- fepois(incidence_300_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+test_temp <- fepois(incidence_300_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)
 
-df <- as.data.frame(test$coeftable)
-colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df <- rbind(as.data.frame(cbind(test$coeftable,c(rep("All",10)))),
+            as.data.frame(cbind(test_temp$coeftable,c(rep("Temp > 20",10)))))
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value', 'Temp')
+df$estimate <- as.numeric(df$estimate)
+df$std_error <- as.numeric(df$std_error)
 df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
                'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
 df$upper <- df$estimate+1.96*df$std_error
 df$lower <- df$estimate-1.96*df$std_error
-dengue_yearly_did <- ggplot(df) +
+dengue_yearly_did <- ggplot(df, aes(group=Temp)) +
   geom_hline(aes(yintercept=0), colour='red', size=.4) +
-  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower, color=Temp), position=position_dodge(width=0.3), width=0, size=0.5) +
+  scale_color_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
   #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
-  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate, fill=Temp), position=position_dodge(width=0.3), size=3, shape=21) +
+  scale_fill_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
   theme_bw()+
   #ylim(c(-0.02,0.31))+
@@ -358,21 +386,27 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
 test <- fepois(occ_10_1 ~ l(hfi_median, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_subset, panel.id = ~CD_MUN+year)
+test_temp <- fepois(occ_10_1 ~ l(hfi_median, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_th_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)
 
-df <- as.data.frame(test$coeftable)
-colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value')
+df <- rbind(as.data.frame(cbind(test$coeftable,c(rep("All",10)))),
+            as.data.frame(cbind(test_temp$coeftable,c(rep("Temp > 20",10)))))
+colnames(df) <- c('estimate', 'std_error', 't_value', 'p_value', 'Temp')
+df$estimate <- as.numeric(df$estimate)
+df$std_error <- as.numeric(df$std_error)
 df$year <- c('Lag 0', 'Lag 1', 'Lag 2', 'Lag 3', 'Lag 4', 'Lag 5',
                'Lag 6',  'Lag 7', 'Lag 8', 'Lag 9')
 df$upper <- df$estimate+1.96*df$std_error
 df$lower <- df$estimate-1.96*df$std_error
-dengue_yearly_did <- ggplot(df) +
+dengue_yearly_did <- ggplot(df, aes(group=Temp)) +
   geom_hline(aes(yintercept=0), colour='red', size=.4) +
-  geom_errorbar(aes(x=year, ymax=upper, ymin=lower), width=0, size=0.5) +
+  geom_errorbar(aes(x=year, ymax=upper, ymin=lower, color=Temp), position=position_dodge(width=0.3), width=0, size=0.5) +
+  scale_color_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   #geom_vline(aes(xintercept=as.Date("2008-01-01")), linetype='dashed', size=0.4) +
   #geom_point(aes(x=as.Date("2008-01-01"), y=0), size=3, shape=21, fill='white') +
-  geom_point(aes(year, estimate), size=3, shape=21, fill='white') +
+  geom_point(aes(year, estimate, fill=Temp), position=position_dodge(width=0.3), size=3, shape=21) +
+  scale_fill_manual(name="Temp condition", values=list('All'="#648FFF",'Temp > 20'='#DC267F')) +
   xlab("Lag (yearly)") + ylab("Coefficient\nestimate") + 
   theme_bw()+
   #ylim(c(-0.02,0.31))+
@@ -395,7 +429,8 @@ dengue_yearly_did
 
 # Next steps
 
-* Include a temperature component (throw out municipalities that do not have suitable climate conditions)
 * Try a long difference (compare rate of change early in sample to rate of change late in sample--don't include all middle years)
 * Try HFI max instead of HFI median
 * Try including a few difference covariates (precip?) and see how much they impact the HFI coefficient value
+* Further explore temperature component (right now just creating a 20 degree C inclusion criteria based on Fig 4b in Skinner et al., 2023)
+

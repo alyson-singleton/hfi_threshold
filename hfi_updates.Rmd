@@ -40,7 +40,7 @@ Skinner et al., 2023 identified HFI = 8 as the threshold value at which dengue r
 ```{r}
 #load new dataset
 hfi_thresholds_full <- read.csv("~/Desktop/doctorate/hfi_threshold/hfi_thresholds_w_options.csv")
-
+hfi_thresholds_full$incidence <- (hfi_thresholds_full$dengue_cases + 1)/hfi_thresholds_full$population
 #################
 #build subset ops
 #################
@@ -165,7 +165,7 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
-test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
+test <- felog(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
 test_temp <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)

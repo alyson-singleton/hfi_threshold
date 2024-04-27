@@ -16,6 +16,8 @@ library(ggplot2)
 library(tidyverse)
 library(plm)
 library(fixest)
+library(geobr)
+library(geojsonsf)
 
 #add back in arial font
 library(showtext)
@@ -125,6 +127,43 @@ ggplot(hfi_thresholds_th_subset) +
         strip.text.x = element_text(size = 14))
 ```
 
+# Maps
+```{r}
+#load data
+hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")
+hfi_threshold_count <- st_as_sf(data.frame(hfi_threshold_count, geometry=geojson_sf(hfi_threshold_count$.geo)))
+
+#create columns for plotting
+hfi_threshold_count$prop_2000 <- hfi_threshold_count$hfp2000/hfi_threshold_count$AREA_KM2
+hfi_threshold_count$prop_2019 <- hfi_threshold_count$hfp2019/hfi_threshold_count$AREA_KM2
+hfi_threshold_count$prop_change_2000_2019 <- hfi_threshold_count$prop_2019 - hfi_threshold_count$prop_2000
+hfi_threshold_count$count_change_2000_2019 <- hfi_threshold_count$hfp2019 - hfi_threshold_count$hfp2000
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=hfp2000), line="black", linewidth=0.001)+
+  labs(title="Number of pixels w HFI>8 in 2000")
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=hfp2019), line="black", linewidth=0.001) +
+  labs(title="Number of pixels w HFI>8 in 2019")
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=count_change_2000_2019), line="black", linewidth=0.001) +
+  labs(title="Change in number of pixels w HFI>8 between 2000 and 2019")
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=prop_2000), line="black", linewidth=0.001) +
+  labs(title="Prop of pixels w HFI>8 in 2000")
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=prop_2019), line="black", linewidth=0.001) +
+  labs(title="Prop of pixels w HFI>8 in 2019")
+
+ggplot() +
+  geom_sf(data=hfi_threshold_count, aes(fill=prop_change_2000_2019), line="black", linewidth=0.001) +
+  labs(title="Change in prop of pixels w HFI>8 between 2000 and 2019")
+```
+
 # Preliminary panel model methods
 
 Preliminary model set up includes a simple panel regression model regressing threshold values against dengue occurrence with nine years of lags, unit (municipality) fixed effects, and yearly fixed effects. Standard errors clustered at the unit level.
@@ -165,7 +204,7 @@ hfi_thresholds_test$year <- as.factor(hfi_thresholds_test$year)
 #hfi_thresholds_test <- hfi_thresholds_test[complete.cases(hfi_thresholds_test),]
 #hfi_thresholds_test$threshold_dummy <- ifelse(hfi_thresholds_test$hfi_median > 8, 1, 0)
 
-test <- felog(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
+test <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_test, panel.id = ~CD_MUN+year)
 test_temp <- fepois(occ_10_1 ~ l(threshold_dummy_gt8, 0:9) | CD_MUN + year, vcov = "cluster", data = hfi_thresholds_temp_subset, panel.id = ~CD_MUN+year)
 #summary(test)
 #coefplot(test)

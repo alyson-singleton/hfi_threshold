@@ -18,7 +18,7 @@ library(plm)
 library(fixest)
 library(geobr)
 library(geojsonsf)
-
+library(RColorBrewer)
 #add back in arial font
 library(showtext)
 font_add("Arial", "/Library/Fonts/Arial.ttf")  # Use the actual file path
@@ -27,6 +27,11 @@ showtext_auto()
 #knitr ops
 knitr::opts_chunk$set(echo = F, results='asis', warning=F, message=F, cache=T,
                       fig.height=5, fig.width=10)
+
+no_axis <- theme(axis.title=element_blank(),
+                 axis.text=element_blank(),
+                 axis.ticks=element_blank(),
+                 panel.grid.major = element_blank())
 ```
 
 # Summary
@@ -128,6 +133,51 @@ ggplot(hfi_thresholds_th_subset) +
 ```
 
 # Maps
+
+```{r, dengue maps,cache=F}
+hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")
+hfi_threshold_count <- st_as_sf(data.frame(hfi_threshold_count, geometry=geojson_sf(hfi_threshold_count$.geo)))
+hfi_threshold_count_reduced <- data.frame(hfi_threshold_count$CD_MUN, hfi_threshold_count$geometry); colnames(hfi_threshold_count_reduced) <- c("CD_MUN", "geometry")
+hfi_threshold_count_reduced$CD_MUN <- as.numeric(substr(hfi_threshold_count_reduced$CD_MUN, 1, 6))
+hfi_thresholds_full_w_geo <- full_join(hfi_thresholds_full, hfi_threshold_count_reduced, by=c("CD_MUN")) %>%
+  st_sf
+  
+hfi_thresholds_full_2019 <- hfi_thresholds_full_w_geo[which(hfi_thresholds_full_w_geo$year==2019),]
+hfi_thresholds_full_2019$incidence_1000_log <- log(hfi_thresholds_full_2019$incidence*1000)
+hfi_thresholds_full_2001 <- hfi_thresholds_full_w_geo[which(hfi_thresholds_full_w_geo$year==2001),]
+hfi_thresholds_full_2001$incidence_1000_log <- log(hfi_thresholds_full_2001$incidence*1000)
+hfi_thresholds_full_2010 <- hfi_thresholds_full_w_geo[which(hfi_thresholds_full_w_geo$year==2010),]
+hfi_thresholds_full_2010$incidence_1000_log <- log(hfi_thresholds_full_2010$incidence*1000)
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_2001, aes(fill=incidence_1000_log), linewidth=0.001) +
+  scale_fill_gradientn(name="2001 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_2010, aes(fill=incidence_1000_log), linewidth=0.001) +
+  scale_fill_gradientn(name="2010 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_2019, aes(fill=incidence_1000_log), linewidth=0.001) +
+  scale_fill_gradientn(name="2019 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+```
+
 ```{r}
 #load data
 hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")

@@ -134,7 +134,7 @@ ggplot(hfi_thresholds_th_subset) +
 
 # Maps
 
-```{r, dengue maps,cache=F}
+```{r, dengue incidence maps,cache=F}
 hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")
 hfi_threshold_count <- st_as_sf(data.frame(hfi_threshold_count, geometry=geojson_sf(hfi_threshold_count$.geo)))
 hfi_threshold_count_reduced <- data.frame(hfi_threshold_count$CD_MUN, hfi_threshold_count$geometry); colnames(hfi_threshold_count_reduced) <- c("CD_MUN", "geometry")
@@ -178,7 +178,58 @@ ggplot() +
 
 ```
 
-```{r}
+```{r, dengue occurrence maps,cache=F}
+hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")
+hfi_threshold_count <- st_as_sf(data.frame(hfi_threshold_count, geometry=geojson_sf(hfi_threshold_count$.geo)))
+hfi_threshold_count_reduced <- data.frame(hfi_threshold_count$CD_MUN, hfi_threshold_count$geometry); colnames(hfi_threshold_count_reduced) <- c("CD_MUN", "geometry")
+hfi_threshold_count_reduced$CD_MUN <- as.numeric(substr(hfi_threshold_count_reduced$CD_MUN, 1, 6))
+
+
+hfi_thresholds_full$year_of_first_occ_10 <- NA  
+for (i in unique(hfi_thresholds_full$CD_MUN)){
+  print(i)
+  data <- hfi_thresholds_full[which(hfi_thresholds_full$CD_MUN==i),]
+  data$year_of_first_occ_10 <- ifelse(length(data$year[which(data$occ_10_1==1)])>0, 
+                                            min(data$year[which(data$occ_10_1==1)]), 0)
+  hfi_thresholds_full[which(hfi_thresholds_full$CD_MUN==i),] <- data
+}
+
+hfi_thresholds_full_w_geo <- full_join(hfi_thresholds_full, hfi_threshold_count_reduced, by=c("CD_MUN")) %>%
+  st_sf
+hfi_thresholds_full_w_geo$year_of_first_occ_5 <- as.character(hfi_thresholds_full_w_geo$year_of_first_occ_5)
+hfi_thresholds_full_w_geo$year_of_first_occ_10 <- as.character(hfi_thresholds_full_w_geo$year_of_first_occ_10)
+hfi_thresholds_full_w_geo$year_of_first_occ_10_periods <- 
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_w_geo, aes(fill=year_of_first_occ_10), linewidth=0.001) +
+  #scale_fill_gradientn(name="2001 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_2010, aes(fill=incidence_1000_log), linewidth=0.001) +
+  scale_fill_gradientn(name="2010 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+ggplot() +
+  geom_sf(data=hfi_thresholds_full_2019, aes(fill=incidence_1000_log), linewidth=0.001) +
+  scale_fill_gradientn(name="2019 log(incidence per 1000)", colours = (brewer.pal(9, "Reds")))+
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=14),
+        legend.title=element_text(size=16),
+        legend.position='right')
+
+```
+
+```{r, hfi maps}
 #load data
 hfi_threshold_count <- read.csv("~/Downloads/brazil_municipality_yearly_hfi_threshold_counts.csv")
 hfi_threshold_count <- st_as_sf(data.frame(hfi_threshold_count, geometry=geojson_sf(hfi_threshold_count$.geo)))

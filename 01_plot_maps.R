@@ -13,6 +13,7 @@ library(geobr)
 library(geojsonsf)
 library(RColorBrewer)
 library(viridis) 
+library(cowplot)
 
 #add back in arial font
 library(showtext)

@@ -81,9 +81,27 @@ hfi_thresholds_full_w_geo <- hfi_thresholds_full_w_geo %>%
          year_of_first_incidence_300_periods = replace(year_of_first_incidence_300_periods, year_of_first_incidence_300_periods %in% 
                                                   c("2017", "2018", "2019"), "2016"))
 
+#group years into three categories for bivariate plot
+hfi_thresholds_full_w_geo <- hfi_thresholds_full_w_geo %>%
+  mutate(year_of_first_occ_10_periods3 = replace(year_of_first_occ_10, year_of_first_occ_10 %in% 
+                                                   c("2001", "2002", "2003", "2004", "2005", "2006"), 1),
+         year_of_first_occ_10_periods3 = replace(year_of_first_occ_10_periods3, year_of_first_occ_10_periods3 %in% 
+                                                   c("2007", "2008", "2009", "2010", "2011", "2012"), 2),
+         year_of_first_occ_10_periods3 = replace(year_of_first_occ_10_periods3, year_of_first_occ_10_periods3 %in% 
+                                                   c("2013", "2014", "2015", "2016", "2017", "2018", "2019"), 3)) %>%
+  mutate(year_of_first_incidence_300_periods3 = replace(year_of_first_incidence_300, year_of_first_incidence_300 %in% 
+                                                          c("2001", "2002", "2003", "2004", "2005", "2006"), 1),
+         year_of_first_incidence_300_periods3 = replace(year_of_first_incidence_300_periods3, year_of_first_incidence_300_periods3 %in% 
+                                                          c("2007", "2008", "2009", "2010", "2011", "2012"), 2),
+         year_of_first_incidence_300_periods3 = replace(year_of_first_incidence_300_periods3, year_of_first_incidence_300_periods3 %in% 
+                                                          c("2013", "2014", "2015", "2016", "2017", "2018", "2019"), 3))
+
 #change zeros to NAs for plotting
 hfi_thresholds_full_w_geo$year_of_first_occ_10_periods <- ifelse(hfi_thresholds_full_w_geo$year_of_first_occ_10_periods==0,NA,hfi_thresholds_full_w_geo$year_of_first_occ_10_periods)
 hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods <- ifelse(hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods==0,NA,hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods)
+
+hfi_thresholds_full_w_geo$year_of_first_occ_10_periods3 <- ifelse(hfi_thresholds_full_w_geo$year_of_first_occ_10_periods3==0,NA,hfi_thresholds_full_w_geo$year_of_first_occ_10_periods3)
+hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods3 <- ifelse(hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods3==0,NA,hfi_thresholds_full_w_geo$year_of_first_incidence_300_periods3)
 
 #simplify geometries for faster plotting
 hfi_thresholds_full_w_geo <- st_simplify(hfi_thresholds_full_w_geo, dTolerance = 75) 
@@ -233,3 +251,111 @@ hfi_abs_change_map <- ggplot() +
         legend.position='right')
 
 ggsave("~/Desktop/hfi_abs_change_weighted_map.pdf", hfi_abs_change_map, device="pdf", width = 7, height=5, units=c("in"))
+
+
+####################
+# F6: Bivariate map of HFI pop weighted count change and dengue introduction
+####################
+
+####################
+#create new dataframe of both dengue and hfi variables
+hfi_thresholds_full_w_geo_count_2001_2019$CD_MUN <- as.numeric(substr(hfi_thresholds_full_w_geo_count_2001_2019$CD_MUN, 1, 6))
+hfi_thresholds_full_no_geo <- hfi_thresholds_full_w_geo%>%st_drop_geometry()
+hfi_thresholds_bivariate_plotting <- full_join(hfi_thresholds_full_w_geo_count_2001_2019,as.data.frame(hfi_thresholds_full_no_geo[,c(5,32,33)]),by=c("CD_MUN"))%>%
+  st_sf
+
+####################
+#create column that will indicate the 9 different groupings using 1/3 tertiles/quantiles for breaks
+# create 3 buckets for gini
+quantiles_hfi <- hfi_thresholds_bivariate_plotting %>%
+  pull(hfi_absolute_change) %>%
+  quantile(probs = seq(0, 1, length.out = 4))
+
+# create 3 buckets for mean income
+quantiles_dengue <- hfi_thresholds_bivariate_plotting %>%
+  pull(mean) %>%
+  quantile(probs = seq(0, 1, length.out = 4))
+
+# create color scale that encodes two variables
+# red for gini and blue for mean income
+# the special notation with gather is due to readability reasons
+bivariate_color_scale <- tibble(
+  "3 - 3" = "#3F2949", # high inequality, high income
+  "2 - 3" = "#435786",
+  "1 - 3" = "#4885C1", # low inequality, high income
+  "3 - 2" = "#77324C",
+  "2 - 2" = "#806A8A", # medium inequality, medium income
+  "1 - 2" = "#89A1C8",
+  "3 - 1" = "#AE3A4E", # high inequality, low income
+  "2 - 1" = "#BC7C8F",
+  "1 - 1" = "#CABED0" # low inequality, low income
+) %>%
+  gather("group", "fill")
+
+# cut into groups defined above and join fill
+hfi_thresholds_bivariate_plotting %<>%
+  mutate(
+    hfi_quantiles = cut(
+      hfi_absolute_change,
+      breaks = quantiles_hfi,
+      include.lowest = TRUE
+    ),
+    dengue_quantiles = year_of_first_incidence_300_periods3,
+    # by pasting the factors together as numbers we match the groups defined
+    # in the tibble bivariate_color_scale
+    group = paste(
+      as.numeric(hfi_quantiles), "-",
+      as.numeric(dengue_quantiles)
+    )
+  ) %>%
+  # we now join the actual hex values per "group"
+  # so each municipality knows its hex value based on the his gini and avg
+  # income value
+  left_join(bivariate_color_scale, by = "group")
+
+####################
+#plot
+hfi_thresholds_bivariate_plotting <- st_simplify(hfi_thresholds_bivariate_plotting, dTolerance = 75) 
+
+bivariate_map <- ggplot() +
+  geom_sf(data=hfi_thresholds_bivariate_plotting, aes(fill=fill), color="lightgrey", size=0.00001) +
+  scale_fill_identity() +
+  #scale_fill_manual(name="Change in prop of pop\nexposed to HFI>8\nfrom 2001-2019", na.value="grey", 
+  #                  values = (brewer.pal(7, "Purples"))) +
+  theme_minimal() +
+  no_axis +
+  theme(legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.position='right')
+
+#legend
+bivariate_color_scale %<>%
+  separate(group, into = c("hfi", "dengue"), sep = " - ") %>%
+  mutate(hfi = as.integer(hfi),
+         dengue = as.integer(dengue))
+
+bivariate_legend <- ggplot() +
+  geom_tile(
+    data = bivariate_color_scale,
+    mapping = aes(
+      x = hfi,
+      y = dengue,
+      fill = fill)
+  ) +
+  scale_fill_identity() +
+  labs(x = "Higher HFI>8 exposure ->",
+       y = "More recent dengue ->") +
+  theme_map() +
+  # make font small enough
+  theme(
+    axis.title = element_text(size = 6),
+    axis.title.y = element_text(angle = 90)
+  ) +
+  # quadratic tiles
+  coord_fixed()
+
+bivariate_map_legend <- ggdraw() +
+  draw_plot(bivariate_map, 0, 0, 1, 1) +
+  draw_plot(bivariate_legend, 0.05, 0.075, 0.2, 0.2)
+
+ggsave("~/Desktop/bivariate_w_legend.pdf", bivariate_map_legend, device="pdf", width = 6, height=5, dpi=100, units=c("in"))

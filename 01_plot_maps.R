@@ -264,6 +264,8 @@ hfi_thresholds_full_no_geo <- hfi_thresholds_full_w_geo%>%st_drop_geometry()
 hfi_thresholds_bivariate_plotting <- full_join(hfi_thresholds_full_w_geo_count_2001_2019,as.data.frame(hfi_thresholds_full_no_geo[,c(5,32,33)]),by=c("CD_MUN"))%>%
   st_sf
 
+hfi_thresholds_bivariate_plotting <- hfi_thresholds_bivariate_plotting %>% st_drop_geometry()
+
 ####################
 #create column that will indicate the 9 different groupings using 1/3 tertiles/quantiles for breaks
 # create 3 buckets for gini
@@ -300,7 +302,7 @@ hfi_thresholds_bivariate_plotting %<>%
       breaks = quantiles_hfi,
       include.lowest = TRUE
     ),
-    dengue_quantiles = year_of_first_incidence_300_periods3,
+    dengue_quantiles = year_of_first_occ_10_periods3,#year_of_first_incidence_300_periods3,
     # by pasting the factors together as numbers we match the groups defined
     # in the tibble bivariate_color_scale
     group = paste(
@@ -316,9 +318,12 @@ hfi_thresholds_bivariate_plotting %<>%
 ####################
 #plot
 hfi_thresholds_bivariate_plotting <- st_simplify(hfi_thresholds_bivariate_plotting, dTolerance = 75) 
+hfi_thresholds_bivariate_plotting <- hfi_thresholds_bivariate_plotting[,c(1:6,8:17)]
+st_write(hfi_thresholds_bivariate_plotting, "~/Desktop/hfi_thresholds_bivariate_plotting.gpkg")
+hfi_thresholds_bivariate_plotting <- st_read("~/Desktop/hfi_thresholds_bivariate_plotting.gpkg")
 
 bivariate_map <- ggplot() +
-  geom_sf(data=hfi_thresholds_bivariate_plotting, aes(fill=fill), color="lightgrey", size=0.00001) +
+  geom_sf(data=hfi_thresholds_bivariate_plotting, aes(fill=fill), color="lightgrey", linewidth=0.00001) +
   scale_fill_identity() +
   #scale_fill_manual(name="Change in prop of pop\nexposed to HFI>8\nfrom 2001-2019", na.value="grey", 
   #                  values = (brewer.pal(7, "Purples"))) +
@@ -327,7 +332,8 @@ bivariate_map <- ggplot() +
   theme(legend.text=element_text(size=12),
         legend.title=element_text(size=12),
         legend.position='right')
-
+hfi_thresholds_bivariate_plotting <- hfi_thresholds_bivariate_plotting[,c(1:13,15:16)]
+colnames(hfi_thresholds_bivariate_plotting)[14] <- "fill"
 #legend
 bivariate_color_scale %<>%
   separate(group, into = c("hfi", "dengue"), sep = " - ") %>%
@@ -356,6 +362,13 @@ bivariate_legend <- ggplot() +
 
 bivariate_map_legend <- ggdraw() +
   draw_plot(bivariate_map, 0, 0, 1, 1) +
-  draw_plot(bivariate_legend, 0.05, 0.075, 0.2, 0.2)
+  draw_plot(bivariate_legend, 0.05, 0.075, 0.25, 0.25)
 
-ggsave("~/Desktop/bivariate_w_legend.pdf", bivariate_map_legend, device="pdf", width = 6, height=5, dpi=100, units=c("in"))
+ggsave("~/Desktop/bivariate_w_legend_occ10.pdf", bivariate_map_legend, device="pdf", width = 6, height=5, dpi=100, units=c("in"))
+
+
+
+
+
+
+

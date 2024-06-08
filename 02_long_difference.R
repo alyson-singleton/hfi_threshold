@@ -44,7 +44,7 @@ long_diff_df <- full_join(hfi_thresholds_full,hfi_thresholds_full_w_geo_count_20
 long_diff_model <- fepois(incidence ~ i(year, weighted_hfi_exposure, ref = '2001') | year + CD_MUN, vcov = "cluster", data = long_diff_df)
 summary(long_diff_model)
 #incidence threshold
-long_diff_model <- feglm(incidence_300_1 ~ weighted_hfi_exposure, #vcov = "cluster", 
+long_diff_model <- feglm(incidence_300_1 ~ i(year, weighted_hfi_exposure, ref = '2001') | year, vcov = "cluster", 
                          family = "binomial", data = long_diff_df)
 summary(long_diff_model)
 
